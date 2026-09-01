@@ -1,6 +1,6 @@
 # InsightPilot — AI Analytics Copilot
 
-**AI-first analytics product prototype for an Associate Product Manager portfolio.**
+A Prototype that turns natural-language business questions into **read-only SQL**, executes the query against a dataset, and presents an evidence-backed result.
 
 ## Product Architecture
 
