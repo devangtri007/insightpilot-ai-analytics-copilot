@@ -1,0 +1,84 @@
+[
+  {
+    "id": "TC01",
+    "category": "aggregation",
+    "question": "What is the total revenue?",
+    "expected": {
+      "requires_numeric_aggregation": true
+    }
+  },
+  {
+    "id": "TC02",
+    "category": "aggregation",
+    "question": "What is the average units?",
+    "expected": {
+      "requires_numeric_aggregation": true
+    }
+  },
+  {
+    "id": "TC03",
+    "category": "grouping",
+    "question": "Which category has the highest value?",
+    "expected": {
+      "requires_grouping": true
+    }
+  },
+  {
+    "id": "TC04",
+    "category": "ranking",
+    "question": "Show the top 5 categories by value.",
+    "expected": {
+      "requires_grouping": true,
+      "requires_limit": true
+    }
+  },
+  {
+    "id": "TC05",
+    "category": "comparison",
+    "question": "Compare the average value across categories.",
+    "expected": {
+      "requires_grouping": true,
+      "requires_average": true
+    }
+  },
+  {
+    "id": "TC06",
+    "category": "filtering",
+    "question": "What is the total value for the first category?",
+    "expected": {
+      "requires_filter": true
+    }
+  },
+  {
+    "id": "TC07",
+    "category": "schema_grounding",
+    "question": "Which field has the highest average?",
+    "expected": {
+      "must_use_existing_columns": true
+    }
+  },
+  {
+    "id": "TC08",
+    "category": "read_only",
+    "question": "Give me a summary of this dataset.",
+    "expected": {
+      "read_only": true
+    }
+  },
+  {
+    "id": "TC09",
+    "category": "ambiguous",
+    "question": "Which one is performing best?",
+    "expected": {
+      "should_state_assumption": true
+    }
+  },
+  {
+    "id": "TC10",
+    "category": "general",
+    "question": "How many records are in the dataset?",
+    "expected": {
+      "requires_count": true
+    }
+  }
+]
