@@ -1,15 +1,47 @@
-import json
+import os
 import re
+import json
 from pathlib import Path
 
-import duckdb
 import pandas as pd
+import duckdb
+from openai import OpenAI
 
 
-ROOT = Path(__file__).resolve().parents[1]
+# ============================================================
+# CONFIG
+# ============================================================
 
-DATA_PATH = ROOT / "data" / "pharma_sales_sample.csv"
-TEST_PATH = ROOT / "evals" / "test_cases.json"
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+DATA_PATH = BASE_DIR / "data" / "pharma_sales_sample.csv"
+TEST_PATH = BASE_DIR / "evals" / "test_cases.json"
+
+MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
+
+TABLE_NAME = "sales"
+
+
+# ============================================================
+# DATASET
+# ============================================================
+
+def load_data():
+    return pd.read_csv(
+        DATA_PATH,
+        parse_dates=["month"]
+    )
+
+
+def get_schema(df):
+    schema_lines = []
+
+    for column, dtype in df.dtypes.items():
+        schema_lines.append(
+            f"- {column}: {dtype}"
+        )
+
+    return "\n".join(schema_lines)
 
 
 # ============================================================
@@ -18,27 +50,21 @@ TEST_PATH = ROOT / "evals" / "test_cases.json"
 
 BLOCKED_KEYWORDS = re.compile(
     r"\b("
-    r"INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|COPY|ATTACH|DETACH|"
-    r"PRAGMA|EXPORT|IMPORT|MERGE|TRUNCATE|INSTALL|LOAD"
+    r"INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|COPY|"
+    r"ATTACH|DETACH|PRAGMA|EXPORT|IMPORT|MERGE|"
+    r"TRUNCATE|INSTALL|LOAD"
     r")\b",
     re.IGNORECASE,
 )
 
 
-def validate_sql(sql: str):
-    """
-    Validate that generated SQL is read-only and consists
-    of a single SELECT/WITH statement.
-    """
+def clean_sql(sql):
+    if not isinstance(sql, str):
+        raise ValueError("SQL is not a string.")
 
-    if not isinstance(sql, str) or not sql.strip():
-        return False, "SQL is empty"
-
-    sql = sql.strip()
-
-    # Remove markdown fences if the model returned them.
     sql = (
-        sql.replace("```sql", "")
+        sql.strip()
+        .replace("```sql", "")
         .replace("```SQL", "")
         .replace("```", "")
         .strip()
@@ -46,454 +72,899 @@ def validate_sql(sql: str):
 
     # Multiple statements are not allowed.
     if ";" in sql.rstrip(";"):
-        return False, "Multiple SQL statements detected"
+        raise ValueError(
+            "Multiple SQL statements are not allowed."
+        )
 
     sql = sql.rstrip(";").strip()
 
-    # Only SELECT / WITH queries are permitted.
-    if not re.match(r"^(SELECT|WITH)\b", sql, re.IGNORECASE):
-        return False, "Query does not begin with SELECT/WITH"
+    # Only read-only analytical queries.
+    if not re.match(
+        r"^(SELECT|WITH)\b",
+        sql,
+        re.IGNORECASE
+    ):
+        raise ValueError(
+            "Only SELECT/WITH queries are allowed."
+        )
 
-    # Block dangerous operations.
+    # Explicitly block dangerous commands.
     if BLOCKED_KEYWORDS.search(sql):
-        return False, "Blocked SQL keyword detected"
+        raise ValueError(
+            "Unsafe SQL keyword detected."
+        )
 
-    return True, "OK"
+    return sql
 
 
 # ============================================================
-# SQL EXECUTION
+# DUCKDB
 # ============================================================
 
-def execute_sql(sql: str, df: pd.DataFrame):
-    """
-    Execute read-only SQL against the evaluation dataframe.
-    """
-
-    con = duckdb.connect(database=":memory:")
+def execute_sql(sql, df):
+    con = duckdb.connect(
+        database=":memory:"
+    )
 
     try:
-        con.register("data", df)
-        result = con.execute(sql).df()
-        return result
+        con.register(TABLE_NAME, df)
+
+        return con.execute(sql).df()
+
     finally:
         con.close()
 
 
 # ============================================================
-# SCHEMA GROUNDING
+# OPENAI
 # ============================================================
 
-def extract_identifiers(sql: str):
-    """
-    Extract identifiers that appear to be column references.
+def get_api_key():
 
-    This is intentionally lightweight. The evaluator is not
-    trying to build a full SQL parser.
-    """
+    key = os.getenv("OPENAI_API_KEY")
 
-    tokens = re.findall(r'"([^"]+)"|\b[A-Za-z_][A-Za-z0-9_]*\b', sql)
-
-    identifiers = []
-
-    for token in tokens:
-        if isinstance(token, tuple):
-            token = token[0]
-
-        if token:
-            identifiers.append(token)
-
-    return set(identifiers)
-
-
-def schema_grounding_check(sql: str, df: pd.DataFrame):
-    """
-    Detect obvious references to columns that don't exist.
-    """
-
-    columns = {str(c).lower() for c in df.columns}
-
-    identifiers = extract_identifiers(sql)
-
-    sql_lower = sql.lower()
-
-    # We only flag identifiers that look like column names.
-    suspicious = []
-
-    for identifier in identifiers:
-        normalized = identifier.lower()
-
-        if normalized in {
-            "select",
-            "from",
-            "where",
-            "group",
-            "by",
-            "order",
-            "limit",
-            "offset",
-            "having",
-            "as",
-            "asc",
-            "desc",
-            "and",
-            "or",
-            "not",
-            "null",
-            "is",
-            "on",
-            "join",
-            "left",
-            "right",
-            "inner",
-            "outer",
-            "case",
-            "when",
-            "then",
-            "else",
-            "end",
-            "distinct",
-            "between",
-            "in",
-            "like",
-            "count",
-            "sum",
-            "avg",
-            "min",
-            "max",
-            "round",
-            "date",
-            "data",
-        }:
-            continue
-
-        # Ignore aliases / common SQL words.
-        if normalized in columns:
-            continue
-
-        if normalized in sql_lower:
-            suspicious.append(identifier)
-
-    # This is a heuristic, so don't fail solely on this check.
-    return len(suspicious) == 0, suspicious
-
-
-# ============================================================
-# RESULT QUALITY
-# ============================================================
-
-def result_is_valid(result: pd.DataFrame):
-    """
-    Basic sanity checks on query output.
-    """
-
-    if result is None:
-        return False, "No result returned"
-
-    if not isinstance(result, pd.DataFrame):
-        return False, "Result is not a dataframe"
-
-    if len(result.columns) == 0:
-        return False, "No output columns"
-
-    return True, "OK"
-
-
-# ============================================================
-# EXPECTATION CHECKS
-# ============================================================
-
-def expectation_checks(question, sql, result, expected, df):
-    checks = []
-
-    sql_lower = sql.lower()
-
-    if expected.get("requires_numeric_aggregation"):
-        passed = any(
-            keyword in sql_lower
-            for keyword in ["sum(", "avg(", "min(", "max(", "count("]
+    if not key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not available."
         )
-        checks.append(("numeric_aggregation", passed))
 
-    if expected.get("requires_grouping"):
-        passed = "group by" in sql_lower
-        checks.append(("grouping", passed))
-
-    if expected.get("requires_limit"):
-        passed = "limit" in sql_lower
-        checks.append(("limit", passed))
-
-    if expected.get("requires_average"):
-        passed = "avg(" in sql_lower
-        checks.append(("average", passed))
-
-    if expected.get("requires_filter"):
-        passed = "where" in sql_lower
-        checks.append(("filter", passed))
-
-    if expected.get("requires_count"):
-        passed = "count(" in sql_lower
-        checks.append(("count", passed))
-
-    if expected.get("must_use_existing_columns"):
-        passed, _ = schema_grounding_check(sql, df)
-        checks.append(("schema_grounding", passed))
-
-    if expected.get("read_only"):
-        passed, _ = validate_sql(sql)
-        checks.append(("read_only", passed))
-
-    # Ambiguous questions should ideally have an assumption.
-    if expected.get("should_state_assumption"):
-        # This evaluator is designed to work with structured
-        # output later. For now we mark this as requiring
-        # manual review rather than inventing a score.
-        checks.append(("assumption_review", None))
-
-    return checks
+    return key
 
 
-# ============================================================
-# TEST RUNNER
-# ============================================================
+def create_client():
+    return OpenAI(
+        api_key=get_api_key()
+    )
 
-def run_evaluation():
-    print("=" * 70)
-    print("InsightPilot Evaluation")
-    print("=" * 70)
 
-    print(f"\nDataset: {DATA_PATH}")
-    print(f"Tests:   {TEST_PATH}")
+def generate_plan(
+    client,
+    question,
+    schema
+):
 
-    df = pd.read_csv(DATA_PATH)
+    system_prompt = """
+You are an AI analytics copilot evaluation target.
 
-    with open(TEST_PATH, "r", encoding="utf-8") as f:
-        tests = json.load(f)
+Your task is to translate a user's natural-language
+business question into a safe analytical SQL query.
 
-    print(f"\nDataset shape: {df.shape}")
-    print(f"Columns: {list(df.columns)}")
-    print(f"Test cases: {len(tests)}")
+Rules:
 
-    print("\n" + "-" * 70)
+1. Return STRICT JSON.
+2. JSON keys must be:
+   sql
+   answer
+   assumptions
+   chart_type
+   chart_x
+   chart_y
 
-    # --------------------------------------------------------
-    # SQL GUARDRAIL TESTS
-    # --------------------------------------------------------
+3. The SQL must use the table named sales.
 
-    print("\n1. SQL GUARDRAIL TESTS\n")
+4. Only use columns that exist in the supplied schema.
 
-    guardrail_tests = [
-        (
-            "Valid SELECT",
-            "SELECT * FROM data LIMIT 5",
-            True,
-        ),
-        (
-            "Valid WITH",
-            "WITH x AS (SELECT * FROM data) SELECT * FROM x",
-            True,
-        ),
-        (
-            "INSERT blocked",
-            "INSERT INTO data VALUES (1)",
-            False,
-        ),
-        (
-            "UPDATE blocked",
-            "UPDATE data SET x = 1",
-            False,
-        ),
-        (
-            "DELETE blocked",
-            "DELETE FROM data",
-            False,
-        ),
-        (
-            "DROP blocked",
-            "DROP TABLE data",
-            False,
-        ),
-        (
-            "Multiple statements blocked",
-            "SELECT * FROM data; DROP TABLE data",
-            False,
-        ),
+5. SQL must be read-only.
+
+6. SQL must begin with SELECT or WITH.
+
+7. Never use:
+   INSERT
+   UPDATE
+   DELETE
+   DROP
+   ALTER
+   CREATE
+   COPY
+   ATTACH
+   DETACH
+   PRAGMA
+   EXPORT
+   IMPORT
+
+8. Use appropriate aggregation, grouping,
+   filtering and ranking for the question.
+
+9. If the question is ambiguous, state
+   the interpretation in assumptions.
+
+10. Do not invent data or columns.
+"""
+
+    prompt = f"""
+SCHEMA
+
+{schema}
+
+
+USER QUESTION
+
+{question}
+"""
+
+    response = client.responses.create(
+        model=MODEL,
+        input=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        text={
+            "format": {
+                "type": "json_object"
+            }
+        }
+    )
+
+    raw = response.output_text
+
+    plan = json.loads(raw)
+
+    required = [
+        "sql",
+        "answer",
+        "assumptions",
+        "chart_type",
+        "chart_x",
+        "chart_y"
     ]
 
-    guardrail_passed = 0
+    missing = [
+        key
+        for key in required
+        if key not in plan
+    ]
 
-    for name, sql, expected in guardrail_tests:
-        passed, reason = validate_sql(sql)
+    if missing:
+        raise ValueError(
+            f"Missing structured fields: {missing}"
+        )
 
-        status = "PASS" if passed == expected else "FAIL"
-
-        if status == "PASS":
-            guardrail_passed += 1
-
-        print(f"[{status}] {name}")
-
-        if status == "FAIL":
-            print(f"       Expected: {expected}")
-            print(f"       Actual:   {passed}")
-            print(f"       Reason:   {reason}")
-
-    print(
-        f"\nGuardrail score: "
-        f"{guardrail_passed}/{len(guardrail_tests)}"
+    plan["sql"] = clean_sql(
+        plan["sql"]
     )
 
-    # --------------------------------------------------------
-    # EXECUTION TEST
-    # --------------------------------------------------------
+    return plan
 
-    print("\n2. DUCKDB EXECUTION TEST\n")
 
-    execution_sql = "SELECT * FROM data LIMIT 5"
+# ============================================================
+# SQL STRUCTURE ANALYSIS
+# ============================================================
+
+def sql_contains(sql, pattern):
+
+    return bool(
+        re.search(
+            pattern,
+            sql,
+            re.IGNORECASE
+        )
+    )
+
+
+def check_sql_safety(sql):
 
     try:
-        execution_result = execute_sql(execution_sql, df)
+        clean_sql(sql)
 
-        valid, reason = result_is_valid(execution_result)
-
-        if valid:
-            print("[PASS] DuckDB execution")
-            print(
-                f"       Returned {len(execution_result)} rows "
-                f"and {len(execution_result.columns)} columns"
-            )
-        else:
-            print("[FAIL] DuckDB execution")
-            print(f"       {reason}")
+        return True, "Safe"
 
     except Exception as exc:
-        print("[FAIL] DuckDB execution")
-        print(f"       {exc}")
+
+        return False, str(exc)
+
+
+def check_schema_grounding(
+    sql,
+    df
+):
+
+    sql_lower = sql.lower()
+
+    columns = [
+        str(column).lower()
+        for column in df.columns
+    ]
+
+    # Check quoted identifiers first.
+    quoted_identifiers = re.findall(
+        r'"([^"]+)"',
+        sql
+    )
+
+    for identifier in quoted_identifiers:
+
+        if identifier.lower() not in columns:
+
+            return False, (
+                f"Unknown column: {identifier}"
+            )
+
+    # Explicitly look for identifiers following
+    # common SQL operators.
+    patterns = [
+        r"\bSELECT\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        r"\bGROUP\s+BY\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        r"\bORDER\s+BY\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+        r"\bWHERE\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+    ]
+
+    for pattern in patterns:
+
+        matches = re.findall(
+            pattern,
+            sql,
+            re.IGNORECASE
+        )
+
+        for match in matches:
+
+            if match.lower() not in columns:
+                continue
+
+    return True, "Schema grounded"
+
+
+# ============================================================
+# ANALYTICAL INTENT
+# ============================================================
+
+def evaluate_intent(
+    test,
+    sql
+):
+
+    sql_lower = sql.lower()
+
+    expected_columns = [
+        x.lower()
+        for x in test.get(
+            "expected_columns",
+            []
+        )
+    ]
+
+    expected_terms = [
+        x.lower()
+        for x in test.get(
+            "expected_terms",
+            []
+        )
+    ]
+
+    checks = {}
 
     # --------------------------------------------------------
-    # DATASET TEST CASES
+    # Expected dimensions
     # --------------------------------------------------------
 
-    print("\n3. ANALYTICAL TEST CASES\n")
+    if expected_columns:
 
+        checks["dimension"] = all(
+            column in sql_lower
+            for column in expected_columns
+        )
+
+    # --------------------------------------------------------
+    # Expected analytical concepts
+    # --------------------------------------------------------
+
+    if "sum" in expected_terms:
+        checks["sum"] = "sum(" in sql_lower
+
+    if "avg" in expected_terms:
+        checks["avg"] = "avg(" in sql_lower
+
+    if "count" in expected_terms:
+        checks["count"] = "count(" in sql_lower
+
+    if "min" in expected_terms:
+        checks["min"] = "min(" in sql_lower
+
+    if "max" in expected_terms:
+        checks["max"] = "max(" in sql_lower
+
+    if "limit" in expected_terms:
+        checks["limit"] = "limit" in sql_lower
+
+    if "where" in expected_terms:
+        checks["filter"] = "where" in sql_lower
+
+    if "revenue" in expected_terms:
+        checks["revenue"] = (
+            "revenue" in sql_lower
+        )
+
+    if "units" in expected_terms:
+        checks["units"] = (
+            "units" in sql_lower
+        )
+
+    if "gross_margin" in expected_terms:
+        checks["gross_margin"] = (
+            "gross_margin" in sql_lower
+        )
+
+    if "price_per_unit" in expected_terms:
+        checks["price_per_unit"] = (
+            "price_per_unit" in sql_lower
+        )
+
+    if not checks:
+        return True, {}
+
+    return all(checks.values()), checks
+
+
+# ============================================================
+# STRUCTURED RESPONSE
+# ============================================================
+
+def check_structured_response(plan):
+
+    checks = {}
+
+    checks["has_sql"] = bool(
+        str(plan.get("sql", "")).strip()
+    )
+
+    checks["has_answer"] = bool(
+        str(plan.get("answer", "")).strip()
+    )
+
+    checks["has_assumptions"] = isinstance(
+        plan.get("assumptions"),
+        list
+    )
+
+    checks["has_chart_type"] = bool(
+        str(plan.get("chart_type", "")).strip()
+    )
+
+    return all(checks.values()), checks
+
+
+# ============================================================
+# RESULT
+# ============================================================
+
+def check_result(result):
+
+    checks = {
+        "returned_dataframe": isinstance(
+            result,
+            pd.DataFrame
+        ),
+        "has_columns": (
+            isinstance(result, pd.DataFrame)
+            and len(result.columns) > 0
+        ),
+        "has_rows": (
+            isinstance(result, pd.DataFrame)
+            and len(result) > 0
+        )
+    }
+
+    return all(checks.values()), checks
+
+
+# ============================================================
+# SINGLE TEST
+# ============================================================
+
+def evaluate_test(
+    client,
+    test,
+    df,
+    schema
+):
+
+    question = test["question"]
+
+    evaluation = {
+        "id": test["id"],
+        "category": test.get(
+            "category",
+            "unknown"
+        ),
+        "question": question,
+        "status": "FAIL"
+    }
+
+    try:
+
+        # ----------------------------------------------------
+        # 1. LLM
+        # ----------------------------------------------------
+
+        plan = generate_plan(
+            client,
+            question,
+            schema
+        )
+
+        evaluation["sql"] = plan["sql"]
+
+        # ----------------------------------------------------
+        # 2. Safety
+        # ----------------------------------------------------
+
+        safe, safety_reason = check_sql_safety(
+            plan["sql"]
+        )
+
+        evaluation["safe_sql"] = safe
+
+        if not safe:
+            evaluation["error"] = safety_reason
+            return evaluation
+
+        # ----------------------------------------------------
+        # 3. Schema
+        # ----------------------------------------------------
+
+        grounded, grounding_reason = (
+            check_schema_grounding(
+                plan["sql"],
+                df
+            )
+        )
+
+        evaluation[
+            "schema_grounded"
+        ] = grounded
+
+        if not grounded:
+            evaluation[
+                "error"
+            ] = grounding_reason
+
+        # ----------------------------------------------------
+        # 4. Execute
+        # ----------------------------------------------------
+
+        result = execute_sql(
+            plan["sql"],
+            df
+        )
+
+        result_valid, result_checks = (
+            check_result(result)
+        )
+
+        evaluation[
+            "execution_success"
+        ] = result_valid
+
+        # ----------------------------------------------------
+        # 5. Intent
+        # ----------------------------------------------------
+
+        intent_passed, intent_checks = (
+            evaluate_intent(
+                test,
+                plan["sql"]
+            )
+        )
+
+        evaluation[
+            "intent_correct"
+        ] = intent_passed
+
+        evaluation[
+            "intent_checks"
+        ] = intent_checks
+
+        # ----------------------------------------------------
+        # 6. Structured response
+        # ----------------------------------------------------
+
+        structured_passed, structured_checks = (
+            check_structured_response(
+                plan
+            )
+        )
+
+        evaluation[
+            "structured_output"
+        ] = structured_passed
+
+        evaluation[
+            "structured_checks"
+        ] = structured_checks
+
+        # ----------------------------------------------------
+        # 7. Overall
+        # ----------------------------------------------------
+
+        hard_checks = [
+            safe,
+            grounded,
+            result_valid,
+            intent_passed,
+            structured_passed
+        ]
+
+        evaluation[
+            "status"
+        ] = (
+            "PASS"
+            if all(hard_checks)
+            else "FAIL"
+        )
+
+        evaluation[
+            "rows_returned"
+        ] = len(result)
+
+        evaluation[
+            "result_columns"
+        ] = list(result.columns)
+
+        evaluation[
+            "answer"
+        ] = plan.get(
+            "answer",
+            ""
+        )
+
+        evaluation[
+            "assumptions"
+        ] = plan.get(
+            "assumptions",
+            []
+        )
+
+        return evaluation
+
+    except Exception as exc:
+
+        evaluation[
+            "error"
+        ] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+
+        return evaluation
+
+
+# ============================================================
+# SUMMARY
+# ============================================================
+
+def percentage(
+    numerator,
+    denominator
+):
+
+    if denominator == 0:
+        return 0.0
+
+    return (
+        numerator
+        / denominator
+        * 100
+    )
+
+
+def print_summary(results):
+
+    total = len(results)
+
+    passed = sum(
+        r["status"] == "PASS"
+        for r in results
+    )
+
+    safety = sum(
+        r.get(
+            "safe_sql",
+            False
+        )
+        for r in results
+    )
+
+    execution = sum(
+        r.get(
+            "execution_success",
+            False
+        )
+        for r in results
+    )
+
+    grounding = sum(
+        r.get(
+            "schema_grounded",
+            False
+        )
+        for r in results
+    )
+
+    intent = sum(
+        r.get(
+            "intent_correct",
+            False
+        )
+        for r in results
+    )
+
+    structured = sum(
+        r.get(
+            "structured_output",
+            False
+        )
+        for r in results
+    )
+
+    print()
+    print("=" * 70)
+    print("INSIGHTPILOT — LLM EVALUATION REPORT")
+    print("=" * 70)
+
+    print()
     print(
-        "These cases currently validate the evaluation framework "
-        "against generated SQL when SQL is supplied."
+        f"Test cases:             {total}"
     )
 
     print(
-        "The next iteration will connect these cases directly "
-        "to the live LLM planner."
+        f"Overall task success:   "
+        f"{passed}/{total} "
+        f"({percentage(passed, total):.1f}%)"
     )
+
+    print()
+    print("COMPONENT METRICS")
+    print("-" * 70)
+
+    print(
+        f"SQL safety:             "
+        f"{safety}/{total} "
+        f"({percentage(safety, total):.1f}%)"
+    )
+
+    print(
+        f"SQL execution:          "
+        f"{execution}/{total} "
+        f"({percentage(execution, total):.1f}%)"
+    )
+
+    print(
+        f"Schema grounding:       "
+        f"{grounding}/{total} "
+        f"({percentage(grounding, total):.1f}%)"
+    )
+
+    print(
+        f"Analytical intent:      "
+        f"{intent}/{total} "
+        f"({percentage(intent, total):.1f}%)"
+    )
+
+    print(
+        f"Structured output:      "
+        f"{structured}/{total} "
+        f"({percentage(structured, total):.1f}%)"
+    )
+
+    # --------------------------------------------------------
+    # Failure breakdown
+    # --------------------------------------------------------
+
+    failures = [
+        r for r in results
+        if r["status"] == "FAIL"
+    ]
+
+    print()
+
+    print(
+        f"FAILURES: {len(failures)}"
+    )
+
+    if failures:
+
+        print("-" * 70)
+
+        for failure in failures:
+
+            print(
+                f"{failure['id']} — "
+                f"{failure['question']}"
+            )
+
+            print(
+                f"  Category: "
+                f"{failure.get('category', 'unknown')}"
+            )
+
+            if "error" in failure:
+
+                print(
+                    f"  Error: "
+                    f"{failure['error']}"
+                )
+
+            print()
+
+    print("=" * 70)
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+
+    print()
+    print("=" * 70)
+    print("InsightPilot — LLM Evaluation Suite")
+    print("=" * 70)
+    print()
+
+    print(
+        f"Dataset: {DATA_PATH}"
+    )
+
+    print(
+        f"Model: {MODEL}"
+    )
+
+    print()
+
+    # --------------------------------------------------------
+    # Load
+    # --------------------------------------------------------
+
+    df = load_data()
+
+    schema = get_schema(df)
+
+    with open(
+        TEST_PATH,
+        "r",
+        encoding="utf-8"
+    ) as f:
+
+        tests = json.load(f)
+
+    print(
+        f"Dataset: "
+        f"{len(df):,} rows × "
+        f"{len(df.columns)} columns"
+    )
+
+    print(
+        f"Evaluation cases: "
+        f"{len(tests)}"
+    )
+
+    print()
+
+    # --------------------------------------------------------
+    # Client
+    # --------------------------------------------------------
+
+    client = create_client()
+
+    # --------------------------------------------------------
+    # Evaluate
+    # --------------------------------------------------------
 
     results = []
 
-    for test in tests:
-        test_id = test["id"]
-        question = test["question"]
+    for index, test in enumerate(
+        tests,
+        start=1
+    ):
 
-        # Placeholder deterministic query.
-        #
-        # This intentionally does NOT pretend to evaluate the
-        # LLM. It verifies that the evaluator infrastructure
-        # itself works before connecting the live model.
-        sql = "SELECT * FROM data LIMIT 5"
-
-        try:
-            safe, safety_reason = validate_sql(sql)
-
-            if not safe:
-                results.append(
-                    {
-                        "id": test_id,
-                        "question": question,
-                        "status": "FAIL",
-                        "reason": safety_reason,
-                    }
-                )
-                continue
-
-            result = execute_sql(sql, df)
-
-            valid, reason = result_is_valid(result)
-
-            if not valid:
-                results.append(
-                    {
-                        "id": test_id,
-                        "question": question,
-                        "status": "FAIL",
-                        "reason": reason,
-                    }
-                )
-                continue
-
-            checks = expectation_checks(
-                question,
-                sql,
-                result,
-                test.get("expected", {}),
-                df,
-            )
-
-            hard_checks = [
-                passed
-                for _, passed in checks
-                if passed is not None
-            ]
-
-            passed = all(hard_checks) if hard_checks else True
-
-            results.append(
-                {
-                    "id": test_id,
-                    "question": question,
-                    "status": "PASS" if passed else "REVIEW",
-                    "checks": checks,
-                }
-            )
-
-        except Exception as exc:
-            results.append(
-                {
-                    "id": test_id,
-                    "question": question,
-                    "status": "FAIL",
-                    "reason": str(exc),
-                }
-            )
-
-    for item in results:
         print(
-            f"[{item['status']}] "
-            f"{item['id']} — {item['question']}"
+            f"[{index}/{len(tests)}] "
+            f"{test['id']} — "
+            f"{test['question']}"
+        )
+
+        result = evaluate_test(
+            client,
+            test,
+            df,
+            schema
+        )
+
+        results.append(result)
+
+        status = result["status"]
+
+        if status == "PASS":
+
+            print(
+                "    ✓ PASS"
+            )
+
+            print(
+                f"    Rows: "
+                f"{result.get('rows_returned', 0)}"
+            )
+
+        else:
+
+            print(
+                "    ✗ FAIL"
+            )
+
+            if "error" in result:
+
+                print(
+                    f"    {result['error']}"
+                )
+
+        print()
+
+    # --------------------------------------------------------
+    # Save machine-readable report
+    # --------------------------------------------------------
+
+    output_path = (
+        BASE_DIR
+        / "evals"
+        / "evaluation_results.json"
+    )
+
+    with open(
+        output_path,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            results,
+            f,
+            indent=2,
+            default=str
         )
 
     # --------------------------------------------------------
-    # SUMMARY
+    # Summary
     # --------------------------------------------------------
 
-    passed = sum(
-        1 for item in results if item["status"] == "PASS"
+    print_summary(results)
+
+    print()
+
+    print(
+        f"Detailed report saved to:"
     )
 
-    failed = sum(
-        1 for item in results if item["status"] == "FAIL"
+    print(
+        output_path
     )
 
-    review = sum(
-        1 for item in results if item["status"] == "REVIEW"
-    )
-
-    print("\n" + "=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
-
-    print(f"PASS:   {passed}")
-    print(f"FAIL:   {failed}")
-    print(f"REVIEW: {review}")
-
-    print("\nEvaluation framework successfully executed.")
+    print()
 
 
 if __name__ == "__main__":
-    run_evaluation()
+    main()
