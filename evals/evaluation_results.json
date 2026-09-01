@@ -1,0 +1,968 @@
+[
+  {
+    "id": "TC01",
+    "category": "aggregation",
+    "question": "What is the total revenue?",
+    "status": "PASS",
+    "sql": "SELECT SUM(revenue) AS total_revenue FROM sales",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "sum": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "total_revenue"
+    ],
+    "answer": "Total revenue is the sum of the revenue column across all sales records.",
+    "assumptions": []
+  },
+  {
+    "id": "TC02",
+    "category": "aggregation",
+    "question": "What is the average revenue per transaction?",
+    "status": "PASS",
+    "sql": "SELECT AVG(revenue) AS average_revenue FROM sales",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "avg": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "average_revenue"
+    ],
+    "answer": "The average revenue per transaction is the average revenue recorded per row in the sales table.",
+    "assumptions": [
+      "Each row in the sales table represents one transaction because no transaction ID column is provided."
+    ]
+  },
+  {
+    "id": "TC03",
+    "category": "aggregation",
+    "question": "How many transactions are in the dataset?",
+    "status": "PASS",
+    "sql": "SELECT COUNT(*) AS transaction_count FROM sales",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "count": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "transaction_count"
+    ],
+    "answer": "Counts the number of transaction records in the dataset.",
+    "assumptions": [
+      "Each row in the sales table represents one transaction."
+    ]
+  },
+  {
+    "id": "TC04",
+    "category": "aggregation",
+    "question": "What is the maximum revenue recorded?",
+    "status": "PASS",
+    "sql": "SELECT MAX(revenue) AS maximum_revenue\nFROM sales",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "max": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "maximum_revenue"
+    ],
+    "answer": "Returns the maximum revenue recorded.",
+    "assumptions": [
+      "NULL revenue values are ignored."
+    ]
+  },
+  {
+    "id": "TC05",
+    "category": "aggregation",
+    "question": "What is the minimum revenue recorded?",
+    "status": "PASS",
+    "sql": "SELECT MIN(revenue) AS minimum_revenue FROM sales",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "min": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "minimum_revenue"
+    ],
+    "answer": "The minimum recorded revenue.",
+    "assumptions": [
+      "Revenue is evaluated across all rows in the sales table, with no filters applied."
+    ]
+  },
+  {
+    "id": "TC06",
+    "category": "grouping",
+    "question": "Compare revenue by region.",
+    "status": "PASS",
+    "sql": "SELECT region, SUM(revenue) AS total_revenue\nFROM sales\nGROUP BY region\nORDER BY total_revenue DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "region",
+      "total_revenue"
+    ],
+    "answer": "Total revenue grouped by region, ranked from highest to lowest.",
+    "assumptions": [
+      "Revenue is compared across all months, products, and channels.",
+      "Regions with NULL values are included as a separate group if present."
+    ]
+  },
+  {
+    "id": "TC07",
+    "category": "grouping",
+    "question": "Compare revenue across products.",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(revenue) AS total_revenue FROM sales GROUP BY product ORDER BY total_revenue DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "product",
+      "total_revenue"
+    ],
+    "answer": "Revenue is aggregated by product across all available records and ranked from highest to lowest.",
+    "assumptions": [
+      "The comparison covers all available months, regions, and channels.",
+      "Revenue should be compared using total revenue rather than average revenue."
+    ]
+  },
+  {
+    "id": "TC08",
+    "category": "grouping",
+    "question": "Compare units sold by region.",
+    "status": "PASS",
+    "sql": "SELECT region, SUM(units) AS units_sold FROM sales GROUP BY region ORDER BY units_sold DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "units": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "region",
+      "units_sold"
+    ],
+    "answer": "Total units sold by region, ranked from highest to lowest.",
+    "assumptions": [
+      "Comparison uses total units sold across all months, products, and channels.",
+      "Regions with null values are grouped together as a null region."
+    ]
+  },
+  {
+    "id": "TC09",
+    "category": "grouping",
+    "question": "Compare average revenue by channel.",
+    "status": "PASS",
+    "sql": "SELECT channel, AVG(revenue) AS average_revenue FROM sales GROUP BY channel ORDER BY average_revenue DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "avg": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 3,
+    "result_columns": [
+      "channel",
+      "average_revenue"
+    ],
+    "answer": "Average revenue compared across sales channels, ranked from highest to lowest.",
+    "assumptions": [
+      "Average revenue is calculated as the mean of the revenue values recorded for each channel.",
+      "Rows with null revenue are excluded by AVG."
+    ]
+  },
+  {
+    "id": "TC10",
+    "category": "grouping",
+    "question": "Show gross margin by product.",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(gross_margin) AS total_gross_margin FROM sales GROUP BY product ORDER BY total_gross_margin DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "gross_margin": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "product",
+      "total_gross_margin"
+    ],
+    "answer": "Gross margin is shown by product, ranked from highest to lowest total gross margin.",
+    "assumptions": [
+      "Gross margin is interpreted as a monetary measure to be summed across records."
+    ]
+  },
+  {
+    "id": "TC11",
+    "category": "ranking",
+    "question": "Which products generated the most revenue?",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(revenue) AS total_revenue\nFROM sales\nGROUP BY product\nORDER BY total_revenue DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "product",
+      "total_revenue"
+    ],
+    "answer": "Products ranked by total revenue from highest to lowest.",
+    "assumptions": [
+      "Revenue is summed across all months, regions, channels, and records for each product.",
+      "All products are returned in descending order rather than limiting the results to a specific top-N."
+    ]
+  },
+  {
+    "id": "TC12",
+    "category": "ranking",
+    "question": "Which region generated the most revenue?",
+    "status": "PASS",
+    "sql": "SELECT region, SUM(revenue) AS total_revenue FROM sales GROUP BY region ORDER BY total_revenue DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "region",
+      "total_revenue"
+    ],
+    "answer": "The region with the highest total revenue is returned by the query.",
+    "assumptions": [
+      "Revenue is aggregated across all months, products, and channels.",
+      "Rows with null region values are excluded from the grouped result."
+    ]
+  },
+  {
+    "id": "TC13",
+    "category": "ranking",
+    "question": "Show the top 3 products by revenue.",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(revenue) AS total_revenue\nFROM sales\nGROUP BY product\nORDER BY total_revenue DESC\nLIMIT 3",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "limit": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 3,
+    "result_columns": [
+      "product",
+      "total_revenue"
+    ],
+    "answer": "Top 3 products ranked by total revenue across all available months, regions, and channels.",
+    "assumptions": [
+      "Revenue is aggregated across all available months, regions, and channels.",
+      "Products are ranked by the sum of the revenue column."
+    ]
+  },
+  {
+    "id": "TC14",
+    "category": "ranking",
+    "question": "Which channel has the highest average revenue?",
+    "status": "PASS",
+    "sql": "SELECT channel, AVG(revenue) AS average_revenue FROM sales GROUP BY channel ORDER BY average_revenue DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "avg": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "channel",
+      "average_revenue"
+    ],
+    "answer": "The channel with the highest average revenue is the top-ranked channel returned by this query.",
+    "assumptions": [
+      "Average revenue is calculated as the mean of the revenue values for each channel.",
+      "Rows with null revenue are excluded by AVG."
+    ]
+  },
+  {
+    "id": "TC15",
+    "category": "ranking",
+    "question": "Which product has the highest weighted gross margin?",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(gross_margin * revenue) / NULLIF(SUM(revenue), 0) AS weighted_gross_margin FROM sales WHERE gross_margin IS NOT NULL AND revenue IS NOT NULL GROUP BY product HAVING SUM(revenue) <> 0 ORDER BY weighted_gross_margin DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "revenue": true,
+      "gross_margin": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "product",
+      "weighted_gross_margin"
+    ],
+    "answer": "The query returns the product with the highest revenue-weighted gross margin.",
+    "assumptions": [
+      "Gross margin is interpreted as a margin rate or percentage.",
+      "Gross margin is weighted by revenue.",
+      "Rows with missing gross_margin or revenue are excluded."
+    ]
+  },
+  {
+    "id": "TC16",
+    "category": "filtering",
+    "question": "What is the total revenue in the West region?",
+    "status": "PASS",
+    "sql": "SELECT SUM(revenue) AS total_revenue FROM sales WHERE region = 'West'",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "filter": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "total_revenue"
+    ],
+    "answer": "The query returns the total revenue for the West region.",
+    "assumptions": [
+      "Revenue is aggregated by summing the revenue column for rows where region equals 'West'."
+    ]
+  },
+  {
+    "id": "TC17",
+    "category": "filtering",
+    "question": "What is the revenue generated by CardioMax?",
+    "status": "PASS",
+    "sql": "SELECT SUM(revenue) AS total_revenue FROM sales WHERE product = 'CardioMax'",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "filter": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "total_revenue"
+    ],
+    "answer": "Total revenue generated by CardioMax across all available months, regions, and channels.",
+    "assumptions": [
+      "Revenue is summed across all available months, regions, and channels.",
+      "Product names match the exact value 'CardioMax'."
+    ]
+  },
+  {
+    "id": "TC18",
+    "category": "filtering",
+    "question": "How many units were sold through the Online channel?",
+    "status": "PASS",
+    "sql": "SELECT SUM(units) AS total_units_sold FROM sales WHERE channel = 'Online'",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "filter": true,
+      "units": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "total_units_sold"
+    ],
+    "answer": "Total units sold through the Online channel.",
+    "assumptions": [
+      "The channel value is exactly 'Online'.",
+      "Units are summed across all months, regions, and products."
+    ]
+  },
+  {
+    "id": "TC19",
+    "category": "filtering",
+    "question": "What was the revenue for NeuroPlus in the East region?",
+    "status": "PASS",
+    "sql": "SELECT SUM(revenue) AS total_revenue\nFROM sales\nWHERE product = 'NeuroPlus'\n  AND region = 'East'",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "filter": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "total_revenue"
+    ],
+    "answer": "Total revenue for NeuroPlus in the East region, across all available months and channels.",
+    "assumptions": [
+      "Revenue is summed across all months and channels because no time period or channel was specified."
+    ]
+  },
+  {
+    "id": "TC20",
+    "category": "filtering",
+    "question": "What is the average revenue for products sold through the Hospital channel?",
+    "status": "PASS",
+    "sql": "SELECT AVG(revenue) AS average_revenue FROM sales WHERE channel = 'Hospital'",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "avg": true,
+      "filter": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "average_revenue"
+    ],
+    "answer": "The average revenue for products sold through the Hospital channel is returned as average_revenue.",
+    "assumptions": [
+      "Average revenue is calculated across all sales records where channel equals 'Hospital'."
+    ]
+  },
+  {
+    "id": "TC21",
+    "category": "comparison",
+    "question": "Which region has the highest average revenue?",
+    "status": "PASS",
+    "sql": "SELECT region, AVG(revenue) AS average_revenue FROM sales GROUP BY region ORDER BY average_revenue DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "avg": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "region",
+      "average_revenue"
+    ],
+    "answer": "The query identifies the region with the highest average revenue.",
+    "assumptions": [
+      "Average revenue is calculated across all records for each region.",
+      "Null revenue values are ignored by AVG()."
+    ]
+  },
+  {
+    "id": "TC22",
+    "category": "comparison",
+    "question": "Which product has the highest average price per unit?",
+    "status": "PASS",
+    "sql": "SELECT product, AVG(price_per_unit) AS average_price_per_unit\nFROM sales\nGROUP BY product\nORDER BY average_price_per_unit DESC\nLIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "avg": true,
+      "price_per_unit": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "product",
+      "average_price_per_unit"
+    ],
+    "answer": "The product with the highest average price per unit is returned by the query.",
+    "assumptions": [
+      "Average price per unit is calculated as the simple average of price_per_unit across all records for each product.",
+      "Null price_per_unit values are ignored by AVG.",
+      "If multiple products tie for the highest average, one product is returned."
+    ]
+  },
+  {
+    "id": "TC23",
+    "category": "comparison",
+    "question": "Compare total units sold across products.",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(units) AS total_units FROM sales GROUP BY product ORDER BY total_units DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "units": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "product",
+      "total_units"
+    ],
+    "answer": "Total units sold are aggregated by product and ranked from highest to lowest.",
+    "assumptions": [
+      "The comparison includes all records in the sales table.",
+      "Units sold are represented by the units column."
+    ]
+  },
+  {
+    "id": "TC24",
+    "category": "comparison",
+    "question": "Compare gross margin across regions.",
+    "status": "PASS",
+    "sql": "SELECT region, SUM(gross_margin) AS total_gross_margin FROM sales GROUP BY region ORDER BY total_gross_margin DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "gross_margin": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "region",
+      "total_gross_margin"
+    ],
+    "answer": "This query compares total gross margin across regions, ranked from highest to lowest.",
+    "assumptions": [
+      "gross_margin is treated as an additive gross-margin amount and summed across records.",
+      "All available data is included because no time period or other filter was specified."
+    ]
+  },
+  {
+    "id": "TC25",
+    "category": "comparison",
+    "question": "Which channel contributes the most revenue?",
+    "status": "PASS",
+    "sql": "SELECT channel, SUM(revenue) AS total_revenue FROM sales GROUP BY channel ORDER BY total_revenue DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "revenue": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "channel",
+      "total_revenue"
+    ],
+    "answer": "The query returns the channel contributing the most total revenue.",
+    "assumptions": [
+      "Revenue is summed across all available records and time periods.",
+      "Null channel values are excluded from the result by the GROUP BY behavior."
+    ]
+  },
+  {
+    "id": "TC26",
+    "category": "schema",
+    "question": "Which product has the highest number of units sold?",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(units) AS total_units_sold\nFROM sales\nGROUP BY product\nORDER BY total_units_sold DESC\nLIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "sum": true,
+      "units": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "product",
+      "total_units_sold"
+    ],
+    "answer": "The product with the highest total number of units sold.",
+    "assumptions": [
+      "Units are summed across all months, regions, and channels.",
+      "If multiple products tie for the highest total, one product is returned."
+    ]
+  },
+  {
+    "id": "TC27",
+    "category": "schema",
+    "question": "Which region has the highest price per unit?",
+    "status": "PASS",
+    "sql": "SELECT region, AVG(price_per_unit) AS average_price_per_unit FROM sales GROUP BY region ORDER BY average_price_per_unit DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true,
+      "avg": true,
+      "price_per_unit": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "region",
+      "average_price_per_unit"
+    ],
+    "answer": "The region with the highest average price per unit is the top-ranked region returned by the query.",
+    "assumptions": [
+      "Price per unit is compared using the average price_per_unit for each region across all sales records.",
+      "If multiple regions tie, only one region is returned."
+    ]
+  },
+  {
+    "id": "TC28",
+    "category": "schema",
+    "question": "What is the total gross margin?",
+    "status": "PASS",
+    "sql": "SELECT SUM(gross_margin) AS total_gross_margin FROM sales",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "sum": true,
+      "gross_margin": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "total_gross_margin"
+    ],
+    "answer": "The total gross margin is the sum of gross_margin across all sales records.",
+    "assumptions": []
+  },
+  {
+    "id": "TC29",
+    "category": "ambiguity",
+    "question": "Which product is performing best?",
+    "status": "PASS",
+    "sql": "SELECT product, SUM(revenue) AS total_revenue, SUM(units) AS total_units, SUM(gross_margin) AS total_gross_margin FROM sales GROUP BY product ORDER BY total_revenue DESC LIMIT 1",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 1,
+    "result_columns": [
+      "product",
+      "total_revenue",
+      "total_units",
+      "total_gross_margin"
+    ],
+    "answer": "The best-performing product is interpreted as the product with the highest total revenue.",
+    "assumptions": [
+      "Performance is measured primarily by total revenue across all available months, regions, and channels.",
+      "gross_margin is reported as an additive value and is included for context."
+    ]
+  },
+  {
+    "id": "TC30",
+    "category": "ambiguity",
+    "question": "Which region is doing better?",
+    "status": "PASS",
+    "sql": "SELECT region, SUM(revenue) AS total_revenue, SUM(gross_margin) AS total_gross_margin, SUM(units) AS total_units, CASE WHEN SUM(revenue) <> 0 THEN SUM(gross_margin) / SUM(revenue) ELSE NULL END AS gross_margin_rate FROM sales GROUP BY region ORDER BY total_revenue DESC",
+    "safe_sql": true,
+    "schema_grounded": true,
+    "execution_success": true,
+    "intent_correct": true,
+    "intent_checks": {
+      "dimension": true
+    },
+    "structured_output": true,
+    "structured_checks": {
+      "has_sql": true,
+      "has_answer": true,
+      "has_assumptions": true,
+      "has_chart_type": true
+    },
+    "rows_returned": 4,
+    "result_columns": [
+      "region",
+      "total_revenue",
+      "total_gross_margin",
+      "total_units",
+      "gross_margin_rate"
+    ],
+    "answer": "The region in the first row is considered to be doing better based primarily on total revenue, with total gross margin, units, and gross margin rate provided for context.",
+    "assumptions": [
+      "Doing better is interpreted primarily as having the highest total revenue across the available data.",
+      "Gross margin is treated as an additive monetary measure, and gross margin rate is calculated as total gross margin divided by total revenue.",
+      "All available months and sales channels are included."
+    ]
+  }
+]
