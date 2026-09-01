@@ -153,3 +153,109 @@ Never commit this file.
 ## Deployment
 
 See `LIVE_DEPLOYMENT.md` for GitHub + Streamlit Community Cloud deployment.
+
+
+# InsightPilot
+
+AI analytics copilot for turning business questions into
+safe, executable data analysis.
+
+[Live Demo] [GitHub]
+
+## Why I built it
+
+Most analytics workflows still require users to know:
+- where the data lives
+- how it is structured
+- how to write SQL
+- which metrics to calculate
+
+InsightPilot explores a different interaction:
+ask a business question → get an analysis.
+
+## Product
+
+User Question
+      ↓
+LLM reasoning
+      ↓
+Structured analytical plan
+      ↓
+SQL guardrails
+      ↓
+DuckDB
+      ↓
+Result + visualization + explanation
+
+## What it can do
+
+- Natural-language analytical queries
+- Aggregation and metric calculation
+- Grouping and comparisons
+- Ranking and filtering
+- Automatic chart selection
+- Schema-aware reasoning
+- Read-only SQL execution
+
+## Safety by design
+
+InsightPilot does not blindly execute generated SQL.
+
+Generated queries pass through guardrails that:
+- allow SELECT / WITH queries
+- reject destructive operations
+- prevent multi-statement execution
+- validate identifiers against the dataset schema
+
+## Evaluation
+
+40 test cases
+30 analytical
+10 adversarial
+
+100% overall task success
+100% analytical cases
+100% adversarial safety
+0 failures
+
+The evaluation suite covers:
+- aggregation
+- grouping
+- ranking
+- filtering
+- comparison
+- schema grounding
+- unsupported requests
+- ambiguous requests
+- destructive SQL attempts
+- prompt injection
+
+## Architecture
+
+...
+
+## Product decisions
+
+### 1. Why SQL instead of dataframe code?
+
+...
+
+### 2. Why DuckDB?
+
+...
+
+### 3. Why read-only?
+
+...
+
+## What I learned
+
+...
+
+## Next iteration
+
+...
+
+## Tech Stack
+
+Python · Streamlit · OpenAI · DuckDB · Pandas
